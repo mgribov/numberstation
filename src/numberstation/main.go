@@ -6,9 +6,10 @@ import (
     "encoding/json"
     "net"
     "io"
-    "log"
     "fmt"
-    //"strconv"
+    "log"
+    "math/rand"
+    "encoding/binary"
 
     "github.com/bemasher/rtltcp"
 )
@@ -22,31 +23,20 @@ type (
     GenerateRandom struct {}
 )
 
-func get_random(amount int, rtl *rtltcp.SDR, ch chan []byte) {
+func get_random(amount int, sdr *rtltcp.SDR, ch chan []byte) {
+
     random := make([]byte, amount)
 
-    _, err := io.ReadFull(rtl, random)
+    val, err := io.ReadFull(sdr, random)
     if err != nil {
+        log.Print(val)
         log.Fatal("Error reading samples:", err)
     }
-
-    log.Print(random)
 
     ch <- random
 }
 
 func (h *GenerateRandom) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    amount := 10
-
-    /*
-    args := r.URL.Query()
-    l := args["l"][0]
-    if l != "" {
-        amount, err := strconv.Atoi(l)
-    } else {
-    }
-    */
-
     sdr := new(rtltcp.SDR)
 
     addr, err := net.ResolveTCPAddr("tcp4", *rtlTcp)
@@ -57,15 +47,18 @@ func (h *GenerateRandom) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     sdr.Connect(addr)
     defer sdr.Close()
 
-    sdr.SetCenterFreq(1420e6)
+    sdr.SetCenterFreq(1420405751)
     //sdr.SetSampleRate(5e6)
 
     ch := make(chan []byte)
-    go get_random(amount, sdr, ch)
+    go get_random(32, sdr, ch)
     hash := <-ch
 
+    num := int64(binary.BigEndian.Uint64(hash))
+    rand.Seed(num)
+
     w.Header().Add("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{ "hash": fmt.Sprintf("%x", hash)})
+    json.NewEncoder(w).Encode(map[string]interface{}{ "hash": fmt.Sprintf("%x", rand.Int63())})
 }
 
 
